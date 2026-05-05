@@ -4,6 +4,7 @@ use std::cell::RefCell;
 #[cfg(test)]
 mod tests {
     use anyhow::{anyhow, bail};
+    use datadriven::TestOutcome;
 
     use super::*;
 
@@ -200,7 +201,7 @@ mod tests {
                 let mut result = String::new();
                 result.push_str(s.input.trim());
                 result.push('\n');
-                result
+                TestOutcome::Output(result)
             })
             .await;
             f
@@ -218,7 +219,7 @@ mod tests {
                     let mut result = String::new();
                     result.push_str(s.input.trim());
                     result.push('\n');
-                    result
+                    TestOutcome::Output(result)
                 })
                 .await;
                 f

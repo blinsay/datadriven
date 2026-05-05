@@ -757,13 +757,18 @@ pub async fn walk_async_concurrent_exclusive<F, T, M>(
     }
 }
 
+pub enum TestOutcome {
+    Output(String),
+    Skip,
+}
+
 #[cfg(feature = "async")]
 impl TestFile {
     /// The async equivalent of `run`.
     pub async fn run_async<F, T>(&mut self, f: F)
     where
         F: FnMut(TestCase) -> T,
-        T: Future<Output = String>,
+        T: Future<Output = TestOutcome>,
     {
         match env::var("REWRITE") {
             Ok(_) => self.run_rewrite_async(f).await,
@@ -774,12 +779,15 @@ impl TestFile {
     async fn run_normal_async<F, T>(&mut self, mut f: F)
     where
         F: FnMut(TestCase) -> T,
-        T: Future<Output = String>,
+        T: Future<Output = TestOutcome>,
     {
         for stanza in self.stanzas.drain(..) {
             if let Stanza::Test(case) = stanza {
                 let original_case = case.clone();
-                let result = f(case).await;
+                let result = match f(case).await {
+                    TestOutcome::Output(result) => result,
+                    TestOutcome::Skip => continue,
+                };
                 if result != original_case.expected {
                     self.failure = Some(format!(
                         "failure:\n{}:{}:\n{}\nexpected:\n{}\nactual:\n{}",
@@ -799,7 +807,7 @@ impl TestFile {
     async fn run_rewrite_async<F, T>(&mut self, mut f: F)
     where
         F: FnMut(TestCase) -> T,
-        T: Future<Output = String>,
+        T: Future<Output = TestOutcome>,
     {
         let mut s = String::new();
         for stanza in self.stanzas.drain(..) {
@@ -808,7 +816,11 @@ impl TestFile {
                     s.push_str(&case.directive_line);
                     s.push('\n');
                     s.push_str(&case.input);
-                    write_result(&mut s, f(case).await);
+                    let result = match f(case.clone()).await {
+                        TestOutcome::Output(result) => result,
+                        TestOutcome::Skip => case.expected, // if skipping, keep old expected value
+                    };
+                    write_result(&mut s, result);
                 }
                 Stanza::Comment(c) => {
                     s.push_str(&c);
